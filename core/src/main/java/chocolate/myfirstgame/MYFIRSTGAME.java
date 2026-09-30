@@ -27,13 +27,34 @@ public class MYFIRSTGAME extends ApplicationAdapter {
     Rectangle houseBounds;
 
     // ---- Herb system ----
-    float[] herbX = {100, 500, 250};
-    float[] herbY = {400, 300, 100};
+    float[] herbX = {100, 550, 400};
+    float[] herbY = {400, 350, 50};
     boolean[] herbCollected = {false, false, false};
+    float[] herbRespawnTimer = {0, 0, 0};
+    float respawnTime = 5f;
     Rectangle[] herbBounds;
 
     int coins = 0;
-    boolean nearHerb = false;   // true if player close enough to collect
+    boolean nearHerb = false;// true if player close enough to collect
+    float shopX = 500, shopY = 400;
+    Rectangle shopBounds;
+
+    boolean hasWeapon = false;
+    boolean shopOpen = false;
+
+    Texture enemyImg;
+
+    float enemyX = 300, enemyY = 50;
+    Rectangle enemyBounds;
+
+    int enemyMaxHealth = 30;
+    int enemyHealth = enemyMaxHealth;
+    boolean enemyAlive = true;
+    float enemyRespawnTimer = 0;
+    float enemyRespawnTime = 8f;
+
+    float attackCooldown = 0;
+    float attackCooldownMax = 0.5f;  // half second between attacks
 
     @Override
     public void create() {
@@ -52,7 +73,11 @@ public class MYFIRSTGAME extends ApplicationAdapter {
         herbBounds = new Rectangle[herbX.length];
         for (int i = 0; i < herbX.length; i++) {
             herbBounds[i] = new Rectangle(herbX[i], herbY[i], herbImg.getWidth(), herbImg.getHeight());
-        }
+            shopBounds = new Rectangle(shopX, shopY, 60, 60);  // simple 60x60 shop zone
+             }
+
+        enemyImg = new Texture("enemy.png");
+        enemyBounds = new Rectangle(enemyX, enemyY, enemyImg.getWidth(), enemyImg.getHeight());
     }
 
     @Override
@@ -79,14 +104,59 @@ public class MYFIRSTGAME extends ApplicationAdapter {
         }
 
         // ---- HERB COLLECTION ----
-        nearHerb = false;
         for (int i = 0; i < herbBounds.length; i++) {
-            if (!herbCollected[i] && playerBounds.overlaps(herbBounds[i])) {
+            if (herbCollected[i]) {
+                herbRespawnTimer[i] += dt;
+                if (herbRespawnTimer[i] >= respawnTime) {
+                    herbCollected[i] = false;
+                    herbRespawnTimer[i] = 0;
+                }
+            } else if (playerBounds.overlaps(herbBounds[i])) {
                 nearHerb = true;
                 if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
                     herbCollected[i] = true;
-                    coins += 5;   // each herb gives 5 coins
+                    coins += 5;
                 }
+            }
+        }
+
+        // ---- SHOP ----
+        boolean nearShop = playerBounds.overlaps(shopBounds);
+
+        if (nearShop && Gdx.input.isKeyJustPressed(Input.Keys.S)) {
+            shopOpen = !shopOpen;   // toggle shop menu on/off
+        }
+
+        if (shopOpen) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) {
+                if (coins >= 20 && !hasWeapon) {
+                    coins -= 20;
+                    hasWeapon = true;
+                }
+            }
+        }
+
+        // ---- ENEMY / FIGHT SYSTEM ----
+        attackCooldown -= dt;
+
+        if (!enemyAlive) {
+            enemyRespawnTimer += dt;
+            if (enemyRespawnTimer >= enemyRespawnTime) {
+                enemyAlive = true;
+                enemyHealth = enemyMaxHealth;
+                enemyRespawnTimer = 0;
+            }
+        }
+
+        boolean nearEnemy = enemyAlive && playerBounds.overlaps(enemyBounds);
+
+        if (nearEnemy && Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && attackCooldown <= 0) {
+            enemyHealth -= 10;   // each hit does 10 damage
+            attackCooldown = attackCooldownMax;
+
+            if (enemyHealth <= 0) {
+                enemyAlive = false;
+                coins += 15;   // reward for defeating enemy
             }
         }
 
@@ -101,10 +171,37 @@ public class MYFIRSTGAME extends ApplicationAdapter {
                 batch.draw(herbImg, herbX[i], herbY[i]);
             }
         }
+        if (enemyAlive) {
+            batch.draw(enemyImg, enemyX, enemyY);
+        }
 
         batch.draw(playerImg, x, y);
+        batch.draw(houseImg, shopX, shopY, 60, 60);  // shop marker (small, temp)
 
         font.draw(batch, "Coins: " + coins, 20, Gdx.graphics.getHeight() - 20);
+
+        if (enemyAlive) {
+            font.draw(batch, "Enemy HP: " + enemyHealth + "/" + enemyMaxHealth, enemyX, enemyY + enemyImg.getHeight() + 20);
+        }
+
+        if (nearEnemy) {
+            font.draw(batch, "Press SPACE to attack", x, y + playerImg.getHeight() + 50);
+        }
+
+        if (nearShop && !shopOpen) {
+            font.draw(batch, "Press S to open shop", x, y + playerImg.getHeight() + 30);
+        }
+
+        if (shopOpen) {
+            font.draw(batch, "SHOP - Press 1 to buy Sword (20 coins)", 50, 400);
+            if (hasWeapon) {
+                font.draw(batch, "You own a Sword!", 50, 360);
+            }
+        }
+
+        if (hasWeapon) {
+            font.draw(batch, "Weapon: Sword", 20, Gdx.graphics.getHeight() - 60);
+        }
 
         if (nearHerb) {
             font.draw(batch, "Press E to collect", x, y + playerImg.getHeight() + 30);
@@ -115,6 +212,7 @@ public class MYFIRSTGAME extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        enemyImg.dispose();
         batch.dispose();
         font.dispose();
         playerImg.dispose();
