@@ -1,15 +1,17 @@
 package chocolate.myfirstgame;
 
-import com.badlogic.gdx.ApplicationAdapter;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.ScreenUtils;
 
-public class MYFIRSTGAME extends ApplicationAdapter {
+public class GameScreen implements Screen {
+    MyGame game;
     SpriteBatch batch;
     BitmapFont font;
 
@@ -17,6 +19,20 @@ public class MYFIRSTGAME extends ApplicationAdapter {
     Texture grassImg;
     Texture houseImg;
     Texture herbImg;
+
+    int villageLevel = 1;
+    int upgradeCost = 100;
+
+    com.badlogic.gdx.Preferences prefs;
+
+    com.badlogic.gdx.audio.Music bgMusic;
+    String[] musicFiles = {"music1.mp3", "music2.mp3"};
+    int currentMusicIndex = 0;
+
+    public GameScreen(MyGame game) {
+        this.game = game;
+    }
+
 
     float x = 50, y = 50;
     float speed = 200;
@@ -44,7 +60,7 @@ public class MYFIRSTGAME extends ApplicationAdapter {
 
     Texture enemyImg;
 
-    float enemyX = 300, enemyY = 50;
+    float enemyX = 150, enemyY = -50;
     Rectangle enemyBounds;
 
     int enemyMaxHealth = 30;
@@ -64,8 +80,32 @@ public class MYFIRSTGAME extends ApplicationAdapter {
     int enemyDamage = 5;
 
     boolean gameOver = false;
+
     @Override
-    public void create() {
+    public void show() {
+        prefs = Gdx.app.getPreferences("MyGameSave");
+
+        String savedName = prefs.getString("playerName", "");
+
+        if (savedName.equals(MyGame.playerName)) {
+            // Same player returning — load their saved progress
+            coins = prefs.getInteger("coins", 0);
+            hasWeapon = prefs.getBoolean("hasWeapon", false);
+            playerHealth = prefs.getInteger("playerHealth", playerMaxHealth);
+            villageLevel = prefs.getInteger("villageLevel", 1);
+        } else {
+            // New player (different name) — start completely fresh
+            coins = 0;
+            hasWeapon = false;
+            playerHealth = playerMaxHealth;
+            villageLevel = 1;
+
+            prefs.putString("playerName", MyGame.playerName);
+            prefs.flush();
+        }
+
+        upgradeCost = 100 * villageLevel;
+
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.getData().setScale(2f);   // make text bigger
@@ -86,10 +126,15 @@ public class MYFIRSTGAME extends ApplicationAdapter {
 
         enemyImg = new Texture("enemy.png");
         enemyBounds = new Rectangle(enemyX, enemyY, enemyImg.getWidth(), enemyImg.getHeight());
+
+        bgMusic = Gdx.audio.newMusic(Gdx.files.internal(musicFiles[currentMusicIndex]));
+        bgMusic.setLooping(true);
+        bgMusic.setVolume(0.5f);
+        bgMusic.play();
     }
 
     @Override
-    public void render() {
+    public void render(float delta) {
         if (gameOver) {
             ScreenUtils.clear(0, 0, 0, 1);
             batch.begin();
@@ -141,6 +186,11 @@ public class MYFIRSTGAME extends ApplicationAdapter {
                     coins += 5;
                 }
             }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+                herbCollected[i] = true;
+                coins += 5;
+                saveGame();   // <-- add this
+            }
         }
 
         // ---- SHOP ----
@@ -157,6 +207,21 @@ public class MYFIRSTGAME extends ApplicationAdapter {
                     hasWeapon = true;
                 }
             }
+        }
+        if (coins >= 20 && !hasWeapon) {
+            coins -= 20;
+            hasWeapon = true;
+            saveGame();   // <-- add this
+        }
+
+        // ---- VILLAGE UPGRADE ----
+        boolean canUpgrade = coins >= upgradeCost;
+
+        if (canUpgrade && Gdx.input.isKeyJustPressed(Input.Keys.U)) {
+            coins -= upgradeCost;
+            villageLevel++;
+            upgradeCost = 100 * villageLevel;
+            saveGame();
         }
 
         // ---- ENEMY / FIGHT SYSTEM ----
@@ -181,6 +246,11 @@ public class MYFIRSTGAME extends ApplicationAdapter {
                 enemyAlive = false;
                 coins += 15;   // reward for defeating enemy
             }
+            if (enemyHealth <= 0) {
+                enemyAlive = false;
+                coins += 15;
+                saveGame();   // <-- add this
+            }
         }
 
         // ---- ENEMY ATTACKS BACK ----
@@ -195,6 +265,17 @@ public class MYFIRSTGAME extends ApplicationAdapter {
                     gameOver = true;
                 }
             }
+        }
+
+        // ---- MUSIC SWITCH ----
+        if (Gdx.input.isKeyJustPressed(Input.Keys.M)) {
+            bgMusic.stop();
+            bgMusic.dispose();
+            currentMusicIndex = (currentMusicIndex + 1) % musicFiles.length;
+            bgMusic = Gdx.audio.newMusic(Gdx.files.internal(musicFiles[currentMusicIndex]));
+            bgMusic.setLooping(true);
+            bgMusic.setVolume(0.5f);
+            bgMusic.play();
         }
 
         // ---- DRAW ----
@@ -217,6 +298,13 @@ public class MYFIRSTGAME extends ApplicationAdapter {
 
         font.draw(batch, "Coins: " + coins, 20, Gdx.graphics.getHeight() - 20);
         font.draw(batch, "HP: " + playerHealth + "/" + playerMaxHealth, 20, Gdx.graphics.getHeight() - 40);
+
+        font.draw(batch, "Village Level: " + villageLevel, 20, Gdx.graphics.getHeight() - 80);
+
+        if (canUpgrade) {
+            font.draw(batch, "Press U to upgrade village (" + upgradeCost + " coins)", 20, Gdx.graphics.getHeight() - 100);
+        }
+
 
         if (enemyAlive) {
             font.draw(batch, "Enemy HP: " + enemyHealth + "/" + enemyMaxHealth, enemyX, enemyY + enemyImg.getHeight() + 20);
@@ -245,7 +333,23 @@ public class MYFIRSTGAME extends ApplicationAdapter {
             font.draw(batch, "Press E to collect", x, y + playerImg.getHeight() + 30);
         }
 
+        font.draw(batch, "Press M to change music", 20, Gdx.graphics.getHeight() - 120);
+
         batch.end();
+    }
+
+    @Override public void resize(int width, int height) {}
+    @Override public void pause() {}
+    @Override public void resume() {}
+    @Override public void hide() {}
+
+    public void saveGame() {
+        prefs.putString("playerName", MyGame.playerName);   // <-- add this
+        prefs.putInteger("coins", coins);
+        prefs.putBoolean("hasWeapon", hasWeapon);
+        prefs.putInteger("playerHealth", playerHealth);
+        prefs.putInteger("villageLevel", villageLevel);
+        prefs.flush();
     }
 
     @Override
@@ -257,5 +361,6 @@ public class MYFIRSTGAME extends ApplicationAdapter {
         grassImg.dispose();
         houseImg.dispose();
         herbImg.dispose();
+        bgMusic.dispose();
     }
 }
