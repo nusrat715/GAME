@@ -56,6 +56,14 @@ public class MYFIRSTGAME extends ApplicationAdapter {
     float attackCooldown = 0;
     float attackCooldownMax = 0.5f;  // half second between attacks
 
+    int playerMaxHealth = 100;
+    int playerHealth = playerMaxHealth;
+
+    float enemyAttackCooldown = 0;
+    float enemyAttackCooldownMax = 1.5f;  // enemy attacks every 1.5 sec
+    int enemyDamage = 5;
+
+    boolean gameOver = false;
     @Override
     public void create() {
         batch = new SpriteBatch();
@@ -82,6 +90,21 @@ public class MYFIRSTGAME extends ApplicationAdapter {
 
     @Override
     public void render() {
+        if (gameOver) {
+            ScreenUtils.clear(0, 0, 0, 1);
+            batch.begin();
+            font.draw(batch, "GAME OVER - Press R to restart", 150, 250);
+            batch.end();
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+                playerHealth = playerMaxHealth;
+                gameOver = false;
+                coins = 0;
+                x = 50; y = 50;
+            }
+            return;   // skip rest of render() while game over
+        }
+
         float dt = Gdx.graphics.getDeltaTime();
 
         // ---- MOVEMENT ----
@@ -160,6 +183,20 @@ public class MYFIRSTGAME extends ApplicationAdapter {
             }
         }
 
+        // ---- ENEMY ATTACKS BACK ----
+        if (nearEnemy && !gameOver) {
+            enemyAttackCooldown -= dt;
+            if (enemyAttackCooldown <= 0) {
+                playerHealth -= enemyDamage;
+                enemyAttackCooldown = enemyAttackCooldownMax;
+
+                if (playerHealth <= 0) {
+                    playerHealth = 0;
+                    gameOver = true;
+                }
+            }
+        }
+
         // ---- DRAW ----
         ScreenUtils.clear(0.2f, 0.6f, 0.3f, 1);
 
@@ -179,6 +216,7 @@ public class MYFIRSTGAME extends ApplicationAdapter {
         batch.draw(houseImg, shopX, shopY, 60, 60);  // shop marker (small, temp)
 
         font.draw(batch, "Coins: " + coins, 20, Gdx.graphics.getHeight() - 20);
+        font.draw(batch, "HP: " + playerHealth + "/" + playerMaxHealth, 20, Gdx.graphics.getHeight() - 40);
 
         if (enemyAlive) {
             font.draw(batch, "Enemy HP: " + enemyHealth + "/" + enemyMaxHealth, enemyX, enemyY + enemyImg.getHeight() + 20);
